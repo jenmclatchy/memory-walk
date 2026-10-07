@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Memory Walk</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Marcellus&family=Sora:wght@400;500;600&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+/* Layout: the photo is the whole world and fills the screen; the memory's name floats top-left, a film strip of photos along the bottom steps you from one into the next. Single dark chrome on purpose so the photo is the only light. */
+:root{
+  color-scheme:dark;
+  --night:#0d1019;
+  --panel:rgba(16,19,30,.72);
+  --line:rgba(233,228,240,.2);
+  --ink:#ece8f2;
+  --dim:#b3aec2;
+  --safelight:#8eeaff;
+  --safelight-ink:#04222b;
+  --pulse:rgba(142,234,255,.45);
+  --pulse-off:rgba(142,234,255,0);
+  --aurora-a:rgba(88,120,255,.16);
+  --aurora-b:rgba(60,220,230,.1);
+  --sheet:#141826;
+  --display:"Cormorant Garamond","Iowan Old Style",Georgia,serif;
+  --ui:"Sora",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+html,body{height:100%}
+body{background:var(--night);color:var(--ink);font-family:var(--ui);font-size:14px;overflow:hidden}
+#stage{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#stage:active{cursor:grabbing}
+#veil{position:fixed;inset:0;background:var(--night);opacity:0;pointer-events:none;transition:opacity .35s}
+#veil.on{opacity:1}
+.top{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + 16px) 16px 28px;display:flex;gap:12px;justify-content:space-between;align-items:flex-start;pointer-events:none;background:linear-gradient(to bottom,rgba(8,10,16,.6),rgba(8,10,16,0))}
+.top>*{pointer-events:auto;min-width:0}
+.name{flex:1 1 auto;max-width:34rem}
+.name label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}
+#memory-name{width:100%;background:transparent;border:0;border-bottom:1px solid transparent;color:var(--ink);font-family:var(--display);font-weight:500;font-size:clamp(24px,4.2vw,36px);line-height:1.2;padding:0 0 2px;text-shadow:0 2px 18px rgba(0,0,0,.7)}
+#memory-name:hover{border-bottom-color:var(--line)}
+#memory-name:focus-visible{outline:0;border-bottom-color:var(--safelight)}
+#memory-name::placeholder{color:var(--dim)}
+.btn{font:500 13px var(--ui);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;backdrop-filter:blur(10px);white-space:nowrap}
+.btn:hover{border-color:var(--ink)}
+.btn:focus-visible,.thumb button:focus-visible,.add:focus-visible,#horizon:focus-visible{outline:2px solid var(--safelight);outline-offset:2px}
+.btn.primary{background:var(--safelight);color:var(--safelight-ink);border-color:var(--safelight);font-weight:600}
+.actions{display:flex;gap:8px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+.tray{position:fixed;left:0;right:0;bottom:0;padding:28px 16px calc(env(safe-area-inset-bottom,0px) + 12px);background:linear-gradient(to top,rgba(8,10,16,.9),rgba(8,10,16,0));display:flex;flex-direction:column;gap:8px}
+.tray-head{display:flex;gap:8px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+#status{font-size:12px;min-width:0;text-shadow:0 1px 8px rgba(0,0,0,.8)}
+#status b{color:var(--safelight);font-weight:500}
+.tune{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+#horizon{width:130px;accent-color:var(--safelight)}
+.hint{color:var(--dim);font-size:12px;text-shadow:0 1px 8px rgba(0,0,0,.8)}
+.strip{display:flex;gap:8px;overflow-x:auto;padding:3px 3px 6px;align-items:center}
+.thumb{position:relative;flex:0 0 auto;height:56px;border-radius:3px;overflow:hidden;background:#000;outline:1px solid var(--line)}
+.thumb.here{outline:2px solid var(--safelight)}
+.thumb .go{display:block;padding:0;border:0;background:none;cursor:pointer;height:56px}
+.thumb canvas{display:block;height:56px;width:auto}
+.thumb .rm{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:0;background:rgba(0,0,0,.7);color:var(--ink);font-size:13px;line-height:1;cursor:pointer}
+.add{flex:0 0 auto;height:56px;padding:0 18px;border:1px dashed var(--safelight);border-radius:3px;background:rgba(13,16,25,.5);color:var(--safelight);font:500 13px var(--ui);cursor:pointer}
+.add:hover{background:rgba(242,178,102,.14)}
+#drop{position:fixed;inset:12px;border:2px dashed var(--safelight);border-radius:10px;background:rgba(13,16,25,.8);display:grid;place-items:center;font-family:var(--display);font-style:italic;font-weight:500;font-size:28px;color:var(--safelight);pointer-events:none;text-align:center;padding:16px}
+#home{--glass-hi:rgba(255,255,255,.82);--glass-lo:rgba(255,255,255,.22);--glass-tint:rgba(150,190,215,.3);--glass-edge:rgba(255,255,255,.75);--glass-shadow:rgba(30,60,90,.35);--night:#c4d4df;--ink:#1c2935;--dim:rgba(24,42,58,.72);--line:rgba(40,60,80,.24);--safelight:rgba(28,62,90,.8);--safelight-ink:#f3f8fb;--pulse:rgba(47,92,124,.35);--pulse-off:rgba(47,92,124,0);--aurora-a:rgba(0,0,0,0);--aurora-b:rgba(0,0,0,0);--panel:rgba(255,255,255,.3);color:var(--ink);color-scheme:light;position:fixed;inset:0;overflow-y:auto;background:var(--night);display:flex;flex-direction:column;align-items:center;padding:0 16px 48px;gap:24px}
+#home::before{content:"";position:fixed;inset:-20%;background:radial-gradient(40% 35% at 30% 35%,var(--aurora-a),transparent 70%),radial-gradient(35% 40% at 72% 60%,var(--aurora-b),transparent 70%);animation:drift 18s ease-in-out infinite alternate;pointer-events:none}
+@keyframes drift{to{transform:translate(4%,-3%) rotate(8deg) scale(1.1)}}
+#home-fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+.hero{position:relative;flex:0 0 auto;min-height:100%;box-sizing:border-box;padding-block:calc(env(safe-area-inset-top,0px) + 32px) 32px;text-align:center;max-width:46rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+.hero .eyebrow{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--safelight)}
+.hero h1{font:400 clamp(44px,10.5vw,112px)/1.02 "Marcellus","Cormorant Garamond",Georgia,serif;margin:0;padding:0 .04em .04em;letter-spacing:.01em;text-wrap:balance;background:linear-gradient(165deg,var(--glass-hi) 10%,var(--glass-lo) 46%,var(--glass-tint) 58%,var(--glass-hi) 92%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1px var(--glass-edge);filter:drop-shadow(0 1px 0 var(--glass-edge)) drop-shadow(0 10px 18px var(--glass-shadow))}
+@keyframes sheen{from{background-position:120% 0}to{background-position:-130% 0}}
+.hero p{margin:0;color:var(--dim);font-size:15px;line-height:1.6;max-width:30rem;text-wrap:balance}
+#to-saved{background:none;border:0;color:var(--dim);font:12px var(--ui);letter-spacing:.16em;text-transform:uppercase;cursor:pointer;padding:6px}
+#to-saved:focus-visible{outline:2px solid var(--safelight);outline-offset:2px}
+.cta{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.btn.big{padding:14px 26px;font-size:14px}
+.btn.primary.big{animation:pulse 2.6s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 var(--pulse)}100%{box-shadow:0 0 0 18px var(--pulse-off)}}
+#acct{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:13px;color:var(--dim)}
+#home-msg{min-height:1.2em;font-size:13px;color:var(--safelight)}
+.saved{position:relative;width:100%;max-width:60rem;display:flex;flex-direction:column;gap:14px}
+.saved h2{font:500 12px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin:0}
+#saved{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
+#saved-empty,#where{color:var(--dim);font-size:13px;margin:0}
+.card{display:flex;flex-direction:column;gap:6px;min-width:0}
+.card .open{display:flex;flex-direction:column;gap:6px;text-align:left;padding:0 0 10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);color:var(--ink);cursor:pointer;font:inherit;backdrop-filter:blur(10px)}
+.card .open:hover{border-color:var(--safelight)}
+.card img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.card .nm{padding:0 12px;font-weight:500;overflow-wrap:anywhere}
+.card .meta{padding:0 12px;font-size:12px;color:var(--dim)}
+.card .del{align-self:flex-start;background:none;border:0;color:var(--dim);font:12px var(--ui);cursor:pointer;padding:2px 0;text-decoration:underline}
+.card .open:focus-visible,.card .del:focus-visible,.sheet input:focus-visible{outline:2px solid var(--safelight);outline-offset:2px}
+#ask{position:fixed;inset:0;background:rgba(6,8,14,.7);backdrop-filter:blur(6px);display:grid;place-items:center;padding:16px}
+.sheet{width:100%;max-width:26rem;background:var(--sheet);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:14px}
+.sheet h2{font:500 24px/1.2 var(--display);margin:0}
+.sheet p{margin:0;color:var(--dim);line-height:1.5;font-size:13px}
+.sheet label{font-size:12px;color:var(--dim)}
+.sheet input{width:100%;margin-top:4px;background:var(--night);border:1px solid var(--line);border-radius:8px;color:var(--ink);font:14px var(--ui);padding:10px 12px}
+.sheet .row{display:flex;flex-direction:column;gap:8px}
+.sheet .btn{white-space:normal}
+#ask-msg{min-height:1.2em;color:var(--safelight)}
+@media (prefers-reduced-motion:reduce){#home::before,.btn.primary.big{animation:none}}
+@media (max-width:640px){.hint{display:none}}
+</style>
+</head>
+<body>
+
+
+<canvas id="stage" aria-label="A walkable world made from your photo"></canvas>
+<div id="veil"></div>
+
+<div class="top">
+  <div class="name">
+    <label for="memory-name">Memory</label>
+    <input id="memory-name" type="text" maxlength="60" placeholder="Name this memory" value="" autocomplete="off">
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="vr" hidden>Enter VR</button>
+    <button class="btn" id="recenter">Recentre</button>
+    <button class="btn" id="home-btn">Home</button>
+  </div>
+</div>
+
+<div class="tray">
+  <div class="tray-head">
+    <div id="status" aria-live="polite"></div>
+    <div class="tune"><label for="horizon">Horizon</label><input id="horizon" type="range" min="10" max="90" value="55" title="Slide until the ground lies flat under you"></div>
+  </div>
+  <div class="hint" id="hint">Drag to look around. W A S D or arrow keys to walk. Walk into a floating photo to step into it.</div>
+  <div class="strip" id="strip">
+    <button class="add" id="add">Add photos</button>
+  </div>
+  <input id="files" type="file" accept="image/*" multiple hidden>
+</div>
+<div id="home">
+  <canvas id="home-fx" aria-hidden="true"></canvas>
+  <div class="hero">
+    <div class="eyebrow">You never step into the same memory twice</div>
+    <h1>Memory Walk</h1>
+    <p>Choose photos from one memory. Each picture opens into a world that wraps all around you, and you can walk through it. Touch the water while you decide.</p>
+    <div class="cta">
+      <button class="btn primary big" id="home-choose">Choose photos</button>
+      <button class="btn big" id="home-example">Try an example</button>
+    </div>
+    <div id="home-msg" aria-live="polite"></div>
+    <div id="acct"><button class="btn" id="signin">Sign in with Google</button><span id="who"></span><button class="btn" id="signout" hidden>Sign out</button></div>
+    <button id="to-saved" hidden>Saved memories ↓</button>
+  </div>
+  <section class="saved">
+    <h2>Saved memories</h2>
+    <p id="where"></p>
+    <p id="saved-empty">Memories you save appear here, ready to walk through again.</p>
+    <div id="saved"></div>
+  </section>
+</div>
+
+<div id="ask" role="dialog" aria-modal="true" aria-labelledby="ask-title" hidden>
+  <div class="sheet">
+    <h2 id="ask-title">Save this memory before you go?</h2>
+    <p id="ask-where"></p>
+    <label for="save-name">Name<input id="save-name" type="text" maxlength="60" placeholder="Untitled memory" autocomplete="off"></label>
+    <div id="ask-msg" aria-live="polite"></div>
+    <div class="row">
+      <button class="btn primary" id="ask-save">Save and go home</button>
+      <button class="btn" id="ask-leave">Go home without saving</button>
+      <button class="btn" id="ask-stay">Stay here</button>
+    </div>
+  </div>
+</div>
+<div id="drop" hidden>Drop the photos to step inside them</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const stage=$('stage'),statusEl=$('status'),strip=$('strip'),nameEl=$('memory-name'),veil=$('veil'),hzEl=$('horizon');
+if(!window.THREE){statusEl.textContent='The 3D engine could not load. Check your connection and reload.';return;}
+const MAX=24, reduce=matchMedia('(prefers-reduced-motion: reduce)').matches, touchy=matchMedia('(pointer: coarse)').matches;
+if(touchy)$('hint').textContent='Left side: drag to walk. Right side: drag to look.';
+const EYE=1.6, RG=45, LIMIT=13, PORTAL_R=6;
+
+/* ---------- renderer ---------- */
+const renderer=new THREE.WebGLRenderer({canvas:stage,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.setClearColor(0x0d1019);
+renderer.xr.enabled=true;
+const CAP=Math.min(touchy?1400:2048,Math.floor(renderer.capabilities.maxTextureSize/2));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(75,1,.05,300);
+const dolly=new THREE.Group();dolly.add(camera);scene.add(dolly);
+camera.position.set(0,EYE,0);
+function fit(){if(renderer.xr.isPresenting)return;const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+addEventListener('resize',fit);fit();
+
+/* ---------- photos ---------- */
+let photos=[], current=0, usingExamples=false, note='', atHome=true, dirty=false, currentId=null; const defaultName='The lake, late summer';
+const home=$('home'),homeMsg=$('home-msg'),ask=$('ask'),appParts=[document.querySelector('.top'),document.querySelector('.tray'),stage];
+
+function toCanvas(src,sw,sh,max){const k=Math.min(1,max/Math.max(sw,sh));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(sw*k));c.height=Math.max(1,Math.round(sh*k));c.getContext('2d').drawImage(src,0,0,c.width,c.height);return c;}
+function guessHorizon(c){ // the row where the picture changes most between its upper and lower part
+  const t=document.createElement('canvas');t.width=1;t.height=48;const x=t.getContext('2d');x.drawImage(c,0,0,1,48);
+  const d=x.getImageData(0,0,1,48).data,l=[];for(let i=0;i<48;i++)l.push(d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11);
+  let best=8,row=-1;for(let i=15;i<=36;i++){const a=(l[i]+l[i+1]+l[i+2])/3,b=(l[i-1]+l[i-2]+l[i-3])/3,df=Math.abs(a-b);if(df>best){best=df;row=i;}}
+  return row<0?.55:row/48;}
+function makePhoto(canvas,label,time,example){return {canvas,aspect:canvas.width/canvas.height,label,time,example,hz:guessHorizon(canvas),thumb:null};}
+
+function examples(){
+  const pal=[['#f6c9a0','#e98f7a','#3b4a6b','#5d7fa3','#22304d','Morning on the dock'],
+             ['#ffd98a','#f29a4b','#7a3f2e','#b0704a','#3a2230','Golden hour'],
+             ['#c79ad6','#70508f','#2a2850','#4a4a86','#16183a','Dusk on the water']];
+  return pal.map((p,i)=>{
+    const c=document.createElement('canvas');c.width=1600;c.height=1100;const x=c.getContext('2d'),w=c.width,h=c.height,hz=h*.56;
+    let g=x.createLinearGradient(0,0,0,hz);g.addColorStop(0,p[0]);g.addColorStop(1,p[1]);x.fillStyle=g;x.fillRect(0,0,w,h);
+    x.globalAlpha=.9;x.fillStyle='#fff6dc';x.beginPath();x.arc(w*(.3+.15*i),hz*.55,h*.05,0,7);x.fill();x.globalAlpha=1;
+    x.fillStyle=p[2];x.beginPath();x.moveTo(0,hz);for(let k=0;k<=16;k++)x.lineTo(w*k/16,hz-h*(.05+.045*Math.sin(k*1.1+i*2)+.02*Math.sin(k*2.9)));x.lineTo(w,hz);x.fill();
+    g=x.createLinearGradient(0,hz,0,h);g.addColorStop(0,p[3]);g.addColorStop(1,p[4]);x.fillStyle=g;x.fillRect(0,hz,w,h-hz);
+    x.strokeStyle='rgba(255,255,255,.22)';for(let k=0;k<26;k++){const f=k/26,y=hz+(h-hz)*f*f+4,l=w*(.08+.3*Math.abs(Math.sin(k*3.1+i))),cx=w*(.5+.42*Math.sin(k*1.7+i));x.lineWidth=1+f*5;x.beginPath();x.moveTo(cx-l/2,y);x.lineTo(cx+l/2,y);x.stroke();}
+    const ph=makePhoto(c,p[5],0,true);ph.hz=.56;return ph;});
+}
+function loadFile(file){return new Promise(res=>{
+  const url=URL.createObjectURL(file),img=new Image();
+  img.onload=()=>{const c=toCanvas(img,img.naturalWidth,img.naturalHeight,CAP);URL.revokeObjectURL(url);res(makePhoto(c,file.name.replace(/\.[^.]+$/,''),file.lastModified||0,false));};
+  img.onerror=()=>{URL.revokeObjectURL(url);res(null);};img.src=url;});}
+async function addFiles(list){
+  const files=[...list].filter(f=>f.type.startsWith('image/')||/\.(jpe?g|png|webp|gif|avif|heic)$/i.test(f.name));
+  if(!files.length)return;
+  statusEl.textContent=homeMsg.textContent='Reading '+files.length+(files.length===1?' photo…':' photos…');
+  const done=await Promise.all(files.map(loadFile)),ok=done.filter(Boolean),bad=done.length-ok.length;
+  note=bad?bad+(bad===1?' file':' files')+' could not be read. Use JPG, PNG or WebP (convert HEIC first).':'';
+  if(!ok.length){if(atHome)homeMsg.textContent=note||'No photos were found in that selection.';else say();return;}
+  if(usingExamples){dropThumbs();photos=[];usingExamples=false;nameEl.value='';currentId=null;currentRec=null;}
+  dirty=true;showApp();
+  photos=photos.concat(ok);
+  if(photos.length>MAX){photos=photos.slice(0,MAX);note=(note+' Only the first '+MAX+' photos are used.').trim();}
+  photos.sort((a,b)=>a.time-b.time);
+  enter(photos.indexOf(ok[0])<0?0:photos.indexOf(ok[0]));
+}
+function dropThumbs(){photos.forEach(p=>{if(p.thumb){p.thumb.dispose();p.thumb=null;}});}
+
+/* ---------- turning one photo into a world ---------- */
+let world=null, worldTex=null, portals=[];
+
+function bake(p){ // photo + its mirror image side by side so it wraps all the way round without a seam, with a soft sky above
+  const W=p.canvas.width,H=p.canvas.height,pad=Math.round(H*.5),c=document.createElement('canvas');c.width=W*2;c.height=H+pad;const x=c.getContext('2d');
+  x.drawImage(p.canvas,0,pad);x.save();x.translate(W*2,0);x.scale(-1,1);x.drawImage(p.canvas,0,pad);x.restore();
+  x.drawImage(c,0,pad,W*2,2,0,0,W*2,pad);
+  const t=document.createElement('canvas');t.width=t.height=1;const tx=t.getContext('2d');tx.drawImage(p.canvas,0,0,W,Math.max(1,H*.06),0,0,1,1);const d=tx.getImageData(0,0,1,1).data;
+  const g=x.createLinearGradient(0,0,0,pad);g.addColorStop(0,'rgba('+d[0]+','+d[1]+','+d[2]+',1)');g.addColorStop(1,'rgba('+d[0]+','+d[1]+','+d[2]+',0)');x.fillStyle=g;x.fillRect(0,0,W*2,pad);
+  return c;}
+function grid(K,S,fn){ // K+1 rings of S+1 points
+  const pos=[],uv=[],idx=[];
+  for(let k=0;k<=K;k++)for(let s=0;s<=S;s++){const r=fn(k,s/S);pos.push(r[0],r[1],r[2]);uv.push(r[3],r[4]);}
+  for(let k=0;k<K;k++)for(let s=0;s<S;s++){const a=k*(S+1)+s,b=a+S+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);return g;}
+
+function clearWorld(keepTex){
+  if(world){scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});world=null;}
+  if(!keepTex&&worldTex){worldTex.dispose();worldTex=null;}
+  portals=[];}
+
+function buildWorld(keepTex){
+  const p=photos[current];clearWorld(keepTex);world=new THREE.Group();
+  if(!worldTex){worldTex=new THREE.CanvasTexture(bake(p));worldTex.encoding=THREE.sRGBEncoding;worldTex.wrapS=THREE.RepeatWrapping;worldTex.anisotropy=renderer.capabilities.getMaxAnisotropy();}
+  const m=p.aspect>2.5?1:p.aspect>=1.2?2:p.aspect>=.8?3:4;      // how many times the photo+mirror pair goes round
+  const span=Math.PI/m/p.aspect, hz=p.hz;                        // vertical angle the photo covers
+  const V=t=>1-(.5+Math.max(-.49,Math.min(.998,t)))/1.5;         // photo row (0 top, 1 bottom) to texture v
+  const U=f=>f*m+.25;                                            // straight ahead is the middle of the photo
+  const lowMin=Math.atan(EYE/RG), lowMax=Math.max(lowMin+.02,Math.min((1-hz)*span,1.4));
+  const mat=new THREE.MeshBasicMaterial({map:worldTex,side:THREE.DoubleSide});
+  // ground: everything under the horizon, laid flat at the distance it would really be from a standing viewer
+  const KG=56;
+  world.add(new THREE.Mesh(grid(KG,128,(k,f)=>{const a=f*Math.PI*2,low=k===0?lowMax:lowMax+(lowMin-lowMax)*(k-1)/(KG-1),d=k===0?0:EYE/Math.tan(low);
+    return [Math.sin(a)*d,0,-Math.cos(a)*d,U(f),V(hz+low/span)];}),mat));
+  // surroundings and sky: everything above the horizon, wrapped all the way round and overhead
+  const RS=Math.hypot(RG,EYE),KD=48;
+  world.add(new THREE.Mesh(grid(KD,128,(k,f)=>{const a=f*Math.PI*2,e=-lowMin+(Math.PI/2+lowMin)*k/KD,c=Math.cos(e)*RS;
+    return [Math.sin(a)*c,EYE+Math.sin(e)*RS,-Math.cos(a)*c,U(f),V(hz-e/span)];}),mat));
+  // the other photos float nearby as doorways
+  const others=photos.map((q,i)=>i).filter(i=>i!==current);
+  others.forEach((i,j)=>{const q=photos[i],a=(j+.5)/others.length*Math.PI*2+Math.PI/others.length*.0+.9;
+    if(!q.thumb){q.thumb=new THREE.CanvasTexture(toCanvas(q.canvas,q.canvas.width,q.canvas.height,512));q.thumb.encoding=THREE.sRGBEncoding;}
+    let h=1.5,w=h*q.aspect;if(w>2.2){w=2.2;h=w/q.aspect;}
+    const d=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:q.thumb}));
+    d.position.set(Math.sin(a)*PORTAL_R,1.45,-Math.cos(a)*PORTAL_R);d.lookAt(0,1.45,0);
+    const fr=new THREE.Mesh(new THREE.PlaneGeometry(w+.1,h+.1),new THREE.MeshBasicMaterial({color:0xf4f0e8}));fr.position.z=-.01;d.add(fr);
+    d.userData={i,ph:j*1.7,stand:new THREE.Vector3(Math.sin(a)*(PORTAL_R-.7),0,-Math.cos(a)*(PORTAL_R-.7)),yaw:a};
+    world.add(d);portals.push(d);});
+  scene.add(world);
+}
+
+let busy=false;
+function enter(i){
+  if(busy)return;busy=true;current=Math.max(0,Math.min(photos.length-1,i));
+  const go=()=>{buildWorld(false);recenter();hzEl.value=Math.round(photos[current].hz*100);renderStrip();say();veil.className='';busy=false;};
+  if(reduce||!world){go();}else{veil.className='on';setTimeout(go,360);}
+}
+function say(){const p=photos[current];if(!p)return;
+  const when=p.time?' · '+new Date(p.time).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}):'';
+  statusEl.innerHTML=(usingExamples?'<b>Example picture.</b> Add your own photos to stand inside them. ':'')+'You are inside “'+p.label.replace(/[<&]/g,'')+'”'+when+(usingExamples?'':' · '+(current+1)+' of '+photos.length)+'.'+(note?' '+note:'');}
+function renderStrip(){
+  [...strip.querySelectorAll('.thumb')].forEach(e=>e.remove());
+  photos.forEach((p,i)=>{const d=document.createElement('div');d.className='thumb'+(i===current?' here':'');
+    const g=document.createElement('button');g.type='button';g.className='go';g.setAttribute('aria-label','Step into '+p.label);g.appendChild(toCanvas(p.canvas,p.canvas.width,p.canvas.height,160));g.onclick=()=>{if(i!==current)enter(i);};d.appendChild(g);
+    if(!p.example){const b=document.createElement('button');b.type='button';b.className='rm';b.textContent='×';b.setAttribute('aria-label','Remove '+p.label);
+      b.onclick=()=>{if(p.thumb)p.thumb.dispose();photos.splice(i,1);note='';dirty=true;if(!photos.length){goHome();return;}enter(i<current?current-1:Math.min(current,photos.length-1));};d.appendChild(b);}
+    strip.appendChild(d);});
+}
+hzEl.addEventListener('input',()=>{const p=photos[current];if(!p)return;p.hz=hzEl.value/100;dirty=true;buildWorld(true);});
+nameEl.addEventListener('input',()=>{dirty=true;});
+
+/* ---------- home, saving, leaving ---------- */
+function showApp(){atHome=false;home.hidden=true;appParts.forEach(e=>{e.hidden=false;});fit();}
+function showHome(){atHome=true;home.hidden=false;appParts.forEach(e=>{e.hidden=true;});homeMsg.textContent='';home.scrollTop=0;listSaved();startHomeAnim();}
+function goHome(){ // clears every photo from the session, then returns to the home page
+  if(session)session.end();clearWorld(false);dropThumbs();photos=[];usingExamples=false;current=0;note='';nameEl.value='';currentId=null;currentRec=null;dirty=false;busy=false;veil.className='';
+  [...strip.querySelectorAll('.thumb')].forEach(e=>e.remove());ask.hidden=true;showHome();}
+/* storage: the signed-in person's private space in this page's database, with this browser as the fallback */
+let cloud=null,currentRec=null;
+// Paste your Firebase project's web config here (Firebase console > Project settings > Your apps).
+const FIREBASE_CONFIG={apiKey:"AIzaSyA9oeO0WA7-zK15-Mp2s6HHdUw95KeVjac",authDomain:"memory-walk-211e7.firebaseapp.com",projectId:"memory-walk-211e7",appId:"1:143806238192:web:dfe61527fc8bdeb8836135"};
+const cloudReady=Promise.resolve();let auth=null;const signin=$('signin'),signout=$('signout'),who=$('who');
+if(window.firebase&&FIREBASE_CONFIG.apiKey.indexOf('PASTE')<0){try{
+  firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();const fs=firebase.firestore();
+  auth.onAuthStateChanged(u=>{cloud=u?fs.collection('users/'+u.uid+'/memories'):null;signin.hidden=!!u;signout.hidden=!u;
+    who.textContent=u?'Signed in as '+(u.email||u.displayName||'your Google account'):'';if(atHome)listSaved();});
+}catch(e){auth=null;}}
+signin.onclick=()=>{if(!auth){homeMsg.textContent='Google sign-in is not set up for this site yet.';return;}
+  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(()=>{homeMsg.textContent='Sign-in did not finish. Please try again.';});};
+signout.onclick=()=>{if(auth)auth.signOut();};
+function idb(){return new Promise((res,rej)=>{let r;try{r=indexedDB.open('memory-walk',1);}catch(e){rej(e);return;}
+  r.onupgradeneeded=()=>r.result.createObjectStore('memories',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+function tx(mode,fn){return idb().then(d=>new Promise((res,rej)=>{const t=d.transaction('memories',mode),q=fn(t.objectStore('memories'));
+  t.oncomplete=()=>{d.close();res(q&&q.result);};t.onerror=t.onabort=()=>{d.close();rej(t.error||new Error('storage'));};}));}
+const blobOf=(c,q)=>new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('blob')),'image/jpeg',q));
+const b64=(c,max,q)=>toCanvas(c,c.width,c.height,max).toDataURL('image/jpeg',q);
+const CH=180000, memName=()=>nameEl.value.trim()||'Untitled memory', newId=()=>'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+async function saveLocal(){
+  const list=[];for(const p of photos)list.push({blob:await blobOf(p.canvas,.88),label:p.label,time:p.time,hz:p.hz});
+  const c0=photos[0].canvas,cover=await blobOf(toCanvas(c0,c0.width,c0.height,480),.8);
+  await tx('readwrite',s=>s.put({id:newId(),name:memName(),saved:Date.now(),cover,photos:list}));}
+async function saveCloud(step){ // each photo is split into pieces small enough for one database document
+  const ref=cloud.doc(newId()),meta=[],written=[];
+  try{
+    for(let i=0;i<photos.length;i++){const p=photos[i];step(i);const s=b64(p.canvas,1400,.8).split(',')[1],n=Math.ceil(s.length/CH);
+      for(let k=0;k<n;k++){const c=ref.collection('c').doc(i+'_'+k);await c.set({d:s.slice(k*CH,(k+1)*CH)});written.push(c);}
+      meta.push({label:p.label,time:p.time,hz:p.hz,chunks:n});}
+    await ref.set({kind:'memory',name:memName(),saved:Date.now(),cover:b64(photos[0].canvas,320,.6),photos:meta});
+  }catch(e){for(const c of written){try{await c.delete();}catch(_){}}throw e;}}
+async function dropSaved(r){
+  if(r.src==='device'){try{await tx('readwrite',s=>s.delete(r.id));}catch(e){}return;}
+  if(!cloud)return;const ref=cloud.doc(r.id);
+  for(let i=0;i<r.photos.length;i++)for(let k=0;k<r.photos[i].chunks;k++){try{await ref.collection('c').doc(i+'_'+k).delete();}catch(e){}}
+  try{await ref.delete();}catch(e){}}
+async function saveMemory(step){
+  await cloudReady;let where='device';
+  if(cloud){try{await saveCloud(step);where='account';}catch(e){}}
+  if(where==='device')await saveLocal();
+  if(currentRec){await dropSaved(currentRec);currentRec=null;}   // an edited memory replaces its earlier copy
+  dirty=false;return where;}
+let urls=[],listing=0;
+async function listSaved(){
+  const run=++listing,box=$('saved'),recs=[],fresh=[];
+  try{(await tx('readonly',s=>s.getAll())||[]).forEach(r=>{const u=URL.createObjectURL(r.cover);fresh.push(u);recs.push({src:'device',id:r.id,name:r.name,saved:r.saved,count:r.photos.length,cover:u,raw:r});});}catch(e){}
+  if(cloud){try{(await cloud.get()).docs.forEach(d=>{const r=d.data();if(r&&r.kind==='memory'&&Array.isArray(r.photos))recs.push({src:'account',id:d.id,name:String(r.name||'Untitled memory'),saved:+r.saved||0,count:r.photos.length,cover:String(r.cover||''),photos:r.photos.map(p=>({label:String(p.label||''),time:+p.time||0,hz:+p.hz||.55,chunks:+p.chunks||0}))});});}catch(e){}}
+  if(run!==listing){fresh.forEach(u=>URL.revokeObjectURL(u));return;}
+  urls.forEach(u=>URL.revokeObjectURL(u));urls=fresh;box.textContent='';recs.sort((a,b)=>b.saved-a.saved);
+  $('saved-empty').hidden=recs.length>0;$('to-saved').hidden=!recs.length;
+  $('where').textContent=cloud?'New memories save to your account.':'New memories save on this device only. Sign in with Google to keep them in your account.';
+  recs.forEach(r=>{const card=document.createElement('div');card.className='card';
+    const open=document.createElement('button');open.type='button';open.className='open';
+    const img=document.createElement('img');if(r.src==='device'||r.cover.indexOf('data:image/')===0)img.src=r.cover;img.alt='';
+    const nm=document.createElement('span');nm.className='nm';nm.textContent=r.name;
+    const meta=document.createElement('span');meta.className='meta';meta.textContent=r.count+(r.count===1?' photo':' photos')+' · '+(r.src==='account'?'in your account':'on this device');
+    open.append(img,nm,meta);open.onclick=()=>openSaved(r);
+    const del=document.createElement('button');del.type='button';del.className='del';del.textContent='Delete';
+    del.onclick=async()=>{if(del.dataset.sure){del.disabled=true;del.textContent='Deleting…';await dropSaved(r);listSaved();}else{del.dataset.sure='1';del.textContent='Delete for good?';}};
+    card.append(open,del);box.appendChild(card);});}
+function imageOf(url,q,revoke){return new Promise(res=>{const im=new Image();
+  im.onload=()=>{const c=toCanvas(im,im.naturalWidth,im.naturalHeight,CAP);if(revoke)URL.revokeObjectURL(url);const p=makePhoto(c,q.label,q.time,false);p.hz=q.hz;res(p);};
+  im.onerror=()=>{if(revoke)URL.revokeObjectURL(url);res(null);};im.src=url;});}
+async function openSaved(r){
+  homeMsg.textContent='Opening…';let got=[];
+  try{
+    if(r.src==='device')got=await Promise.all(r.raw.photos.map(q=>imageOf(URL.createObjectURL(q.blob),q,true)));
+    else for(let i=0;i<r.photos.length;i++){const q=r.photos[i],parts=await Promise.all(Array.from({length:q.chunks},(_,k)=>cloud.doc(r.id).collection('c').doc(i+'_'+k).get()));
+      got.push(await imageOf('data:image/jpeg;base64,'+parts.map(s=>s.exists?String(s.data().d||''):'').join(''),q,false));}
+  }catch(e){got=[];}
+  got=got.filter(Boolean);
+  if(!got.length){homeMsg.textContent='That memory could not be opened.';return;}
+  photos=got;usingExamples=false;nameEl.value=r.name;currentRec=r;dirty=false;note='';showApp();enter(0);}
+$('to-saved').onclick=()=>document.querySelector('.saved').scrollIntoView({behavior:reduce?'auto':'smooth'});
+$('home-choose').onclick=()=>$('files').click();
+$('home-example').onclick=()=>{photos=examples();usingExamples=true;nameEl.value=defaultName;currentId=null;currentRec=null;dirty=false;showApp();enter(0);};
+$('home-btn').onclick=()=>{if(!dirty||usingExamples||!photos.length){goHome();return;}
+  $('save-name').value=nameEl.value;$('ask-msg').textContent='';
+  $('ask-where').textContent='Going home clears every photo from this session. Saving keeps the memory '+(cloud?'in your Google account space, so it is there whenever you sign in.':'on this device only. Sign in with Google on the home page first if you want it in your account.');
+  ask.hidden=false;$('ask-save').focus();};
+$('ask-stay').onclick=()=>{ask.hidden=true;};
+$('ask-leave').onclick=goHome;
+$('ask-save').onclick=async()=>{const b=$('ask-save'),msg=$('ask-msg');b.disabled=true;msg.textContent='Saving…';
+  try{nameEl.value=$('save-name').value.trim();const n=photos.length,where=await saveMemory(i=>{msg.textContent='Saving photo '+(i+1)+' of '+n+'…';});
+    goHome();homeMsg.textContent=where==='account'?'Saved to your account.':(cloud?'Your account could not take this memory, so it was saved on this device.':'Saved on this device.');}
+  catch(e){msg.textContent='The memory could not be saved. You can stay here, or go home without saving.';}
+  b.disabled=false;};
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!ask.hidden)ask.hidden=true;});
+
+// home page backdrop: sunlight rippling on a pale sea seen through glass, drawn live on the graphics card
+const hc=$('home-fx'),gl=hc.getContext('webgl',{antialias:false});let animOn=false,T=20,prog=null,uR,uT,uM,uP,ri=0,lastRip=0,lx=0,ly=0;const rip=new Float32Array(36).fill(-99);const ptr={x:0,y:0,sx:0,sy:0};
+const FRAG=`precision highp float;uniform vec2 r;uniform float t;uniform vec2 m;uniform vec3 rp[12];
+float ca(vec2 q,float tm){vec2 p=mod(q*6.28318,6.28318)-250.;vec2 i=p;float c=1.;
+ for(int n=0;n<5;n++){float tt=tm*(1.-(3.5/float(n+1)));
+  i=p+vec2(cos(tt-i.x)+sin(tt+i.y),sin(tt-i.y)+cos(tt+i.x));
+  c+=1./length(vec2(p.x/(sin(i.x+tt)/.005),p.y/(cos(i.y+tt)/.005)));}
+ c/=5.;c=1.17-pow(c,1.4);return clamp(pow(abs(c),8.),0.,1.);}
+void main(){vec2 uv0=(gl_FragCoord.xy-.5*r)/r.y;vec2 dsp=vec2(0.);float gl=0.;
+ for(int k=0;k<12;k++){vec3 q=rp[k];float age=t-q.z;if(age>0.&&age<6.){vec2 dv=uv0-q.xy;float d=length(dv)+.0001,fr=age*.19+.02;
+   float env=exp(-age*.9)/(1.+d*5.)*smoothstep(fr+.04,fr-.03,d)*smoothstep(fr-.24,fr-.03,d);float wv=sin((d-fr)*(30.-age*2.5))*env;dsp+=dv/d*wv;gl+=wv;}}
+ vec2 uv=uv0+m*.03+dsp*.016;
+ float s=t*.45;
+ vec2 wp=uv+.07*vec2(sin(uv.y*2.3+s*.11)+sin(uv.y*4.1-s*.07+uv.x*1.2),cos(uv.x*2.1-s*.09)+sin(uv.x*3.7+s*.06+uv.y*1.3));
+ float h=sin(dot(wp,vec2(1.,.35))*2.6+s*.16)+.6*sin(dot(wp,vec2(-.5,1.))*4.1-s*.2)+.35*sin(dot(wp,vec2(.8,-.9))*7.3+s*.27)+.2*sin(dot(wp,vec2(.2,1.))*12.+s*.33);
+ float sw=h/2.15*.5+.5;
+ float v1=ca(wp*.6+vec2(0.,s*.006),s*.2+23.),v2=ca(wp*.27+vec2(3.1,1.7),s*.11+51.);
+ vec3 col=mix(vec3(.55,.68,.78),vec3(.86,.92,.95),smoothstep(.05,.95,sw));
+ col=mix(col,vec3(.47,.62,.74),v2*.18);
+ float mask=smoothstep(.0,.8,length(uv0*vec2(.5,1.2)));
+ col+=vec3(1.)*v1*mix(.2,.4,mask)*(.55+.45*sw);
+ col+=vec3(1.)*max(gl,0.)*.09-vec3(.06,.05,.04)*max(-gl,0.);
+ gl_FragColor=vec4(clamp(col,0.,1.),1.);}`;
+if(gl){try{
+  const mk=(type,src)=>{const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
+  const p=gl.createProgram();gl.attachShader(p,mk(gl.VERTEX_SHADER,'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}'));gl.attachShader(p,mk(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error('link');
+  gl.useProgram(p);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+  const loc=gl.getAttribLocation(p,'a');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  uR=gl.getUniformLocation(p,'r');uT=gl.getUniformLocation(p,'t');uM=gl.getUniformLocation(p,'m');uP=gl.getUniformLocation(p,'rp[0]');prog=p;
+}catch(e){prog=null;}}
+function addRip(e,force){ // touching the water: every stroke of the pointer sends a ring out across the surface
+  const w=hc.clientWidth,h=hc.clientHeight,now=performance.now(),dx=e.clientX-lx,dy=e.clientY-ly;if(!h||reduce)return;
+  if(!force&&(now-lastRip<220||dx*dx+dy*dy<3600))return;lastRip=now;lx=e.clientX;ly=e.clientY;
+  rip[ri*3]=(e.clientX-w/2)/h;rip[ri*3+1]=(h/2-e.clientY)/h;rip[ri*3+2]=T;ri=(ri+1)%12;}
+home.addEventListener('pointermove',e=>{ptr.x=e.clientX/innerWidth*2-1;ptr.y=1-e.clientY/innerHeight*2;addRip(e,false);});
+home.addEventListener('pointerdown',e=>addRip(e,true));
+function startHomeAnim(){
+  if(animOn||!prog)return;animOn=true;let lt=performance.now();
+  (function loop(t){
+    if(!atHome){animOn=false;return;}
+    const dt=Math.min(.05,(t-lt)/1000)||0;lt=t;const k=touchy?.6:1,w=Math.round(hc.clientWidth*k),h=Math.round(hc.clientHeight*k);
+    if(hc.width!==w||hc.height!==h){hc.width=w;hc.height=h;}
+    if(!reduce)T+=dt;ptr.sx+=(ptr.x-ptr.sx)*.015;ptr.sy+=(ptr.y-ptr.sy)*.015;
+    if(w>0&&h>0){gl.viewport(0,0,w,h);gl.uniform2f(uR,w,h);gl.uniform1f(uT,T);gl.uniform2f(uM,ptr.sx,ptr.sy);gl.uniform3fv(uP,rip);gl.drawArrays(gl.TRIANGLES,0,3);}
+    if(reduce&&w>0){animOn=false;return;}
+    requestAnimationFrame(loop);
+  })(lt);}
+
+/* ---------- moving through it ---------- */
+let yaw=0,pitch=0,glide=null;const keys={},joy={x:0,y:0};
+function recenter(){dolly.position.set(0,0,0);yaw=0;pitch=0;glide=null;}
+$('recenter').onclick=recenter;
+addEventListener('keydown',e=>{if(atHome||!ask.hidden||e.target.tagName==='INPUT')return;keys[e.code]=true;if(/^Arrow|Space/.test(e.code))e.preventDefault();});
+addEventListener('keyup',e=>{keys[e.code]=false;});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
+const ptrs=new Map(),ray=new THREE.Raycaster(),v2=new THREE.Vector2();
+stage.addEventListener('pointerdown',e=>{
+  const mode=(e.pointerType==='touch'&&e.clientX<innerWidth*.4)?'walk':'look';
+  ptrs.set(e.pointerId,{mode,x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,t:performance.now(),moved:0});
+  try{stage.setPointerCapture(e.pointerId);}catch(_){}
+  if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();});
+stage.addEventListener('pointermove',e=>{
+  const p=ptrs.get(e.pointerId);if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;p.moved+=Math.abs(dx)+Math.abs(dy);
+  if(p.mode==='look'){const k=e.pointerType==='touch'?.006:.004;yaw-=dx*k;pitch=Math.max(-1.35,Math.min(1.35,pitch-dy*k));if(p.moved>6)glide=null;}
+  else{joy.x=Math.max(-1,Math.min(1,(p.x-p.x0)/60));joy.y=Math.max(-1,Math.min(1,(p.y-p.y0)/60));glide=null;}});
+function up(e){const p=ptrs.get(e.pointerId);if(!p)return;ptrs.delete(e.pointerId);if(p.mode==='walk')joy.x=joy.y=0;
+  if(p.moved<6&&performance.now()-p.t<400&&e.type==='pointerup'){
+    v2.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(v2,camera);
+    const hit=ray.intersectObjects(portals,false)[0];if(hit){if(reduce)enter(hit.object.userData.i);else glide={pos:hit.object.userData.stand,yaw:hit.object.userData.yaw};}}}
+stage.addEventListener('pointerup',up);stage.addEventListener('pointercancel',up);
+
+const fwd=new THREE.Vector3();let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;const vr=renderer.xr.isPresenting;
+  if(atHome||!world)return;
+  let mx=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0)+joy.x;
+  let mz=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0)-joy.y;
+  if(vr){const s=renderer.xr.getSession();if(s)for(const src of s.inputSources){const g=src.gamepad;if(!g)continue;
+      const ax=g.axes.length>=4?g.axes[2]:g.axes[0]||0,ay=g.axes.length>=4?g.axes[3]:g.axes[1]||0;
+      if(Math.abs(ay)>.15)mz-=ay;if(Math.abs(ax)>.15){if(src.handedness==='right')yaw+=ax*dt*1.6;else mx+=ax;}}}
+  if(mx||mz)glide=null;
+  if(glide){const k=1-Math.exp(-dt*3);dolly.position.lerp(glide.pos,k);let d=glide.yaw-yaw;d=Math.atan2(Math.sin(d),Math.cos(d));yaw+=d*k;pitch+=(0-pitch)*k;}
+  dolly.rotation.y=-yaw;if(!vr)camera.rotation.x=-pitch;
+  if(mx||mz){camera.getWorldDirection(fwd);fwd.y=0;if(fwd.lengthSq()<1e-4)fwd.set(0,0,-1);fwd.normalize();
+    const sp=(keys.ShiftLeft||keys.ShiftRight?4.5:2.4)*dt,l=Math.max(1,Math.hypot(mx,mz));
+    dolly.position.x+=(fwd.x*mz-fwd.z*mx)/l*sp;dolly.position.z+=(fwd.z*mz+fwd.x*mx)/l*sp;
+    const d=Math.hypot(dolly.position.x,dolly.position.z);if(d>LIMIT){dolly.position.x*=LIMIT/d;dolly.position.z*=LIMIT/d;}}
+  if(!busy)for(const d of portals){if(!reduce)d.position.y=1.45+Math.sin(now/1400+d.userData.ph)*.05;
+    if(Math.hypot(d.position.x-dolly.position.x,d.position.z-dolly.position.z)<1.05){enter(d.userData.i);break;}}
+  renderer.render(scene,camera);
+}
+renderer.setAnimationLoop(frame);
+
+/* ---------- inputs ---------- */
+$('add').onclick=()=>$('files').click();
+$('files').addEventListener('change',e=>{addFiles(e.target.files);e.target.value='';});
+let dragDepth=0;const drop=$('drop');
+addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;drop.hidden=false;});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;drop.hidden=true;}});
+addEventListener('drop',e=>{e.preventDefault();dragDepth=0;drop.hidden=true;if(e.dataTransfer&&e.dataTransfer.files)addFiles(e.dataTransfer.files);});
+addEventListener('paste',e=>{const f=e.clipboardData&&e.clipboardData.files;if(f&&f.length)addFiles(f);});
+
+/* ---------- headset ---------- */
+const vrBtn=$('vr');let session=null;
+if(navigator.xr&&navigator.xr.isSessionSupported){navigator.xr.isSessionSupported('immersive-vr').then(ok=>{vrBtn.hidden=!ok;}).catch(()=>{});}
+vrBtn.onclick=async()=>{
+  if(session){session.end();return;}
+  try{session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor']});
+    camera.position.set(0,0,0);camera.rotation.set(0,0,0);renderer.xr.setReferenceSpaceType('local-floor');await renderer.xr.setSession(session);vrBtn.textContent='Exit VR';
+    session.addEventListener('end',()=>{session=null;vrBtn.textContent='Enter VR';camera.position.set(0,EYE,0);fit();});
+  }catch(err){session=null;note='The headset session could not start here.';say();}
+};
+
+showHome();
+})();
+</script>
+
+</body>
+</html>
